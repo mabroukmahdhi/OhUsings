@@ -17,39 +17,43 @@ namespace OhUsings.Services
     /// </summary>
     public sealed class MissingUsingsAnalyzer : IMissingUsingsAnalyzer
     {
-        // CS0103: The name 'X' does not exist in the current context
-        // CS0234: The type or namespace name 'X' does not exist in the namespace 'Y'
-        // CS0246: The type or namespace name 'X' could not be found
-        // CS0305: Using the generic type 'X<T>' requires N type arguments
-        // CS0308: The non-generic type 'X' cannot be used with type arguments
-        // CS0426: The type name 'X' does not exist in the type 'Y'
-        // CS0616: 'X' is not an attribute class
-        // CS0619: 'X' is obsolete (can surface when wrong type is resolved)
-        // CS1061: 'X' does not contain a definition for 'Y' (extension methods)
-        // CS1501: No overload for method 'X' takes N arguments (extension methods)
-        // CS1503: Cannot convert from 'X' to 'Y'
-        // CS1929: 'X' does not contain a definition for 'Y' and the best extension method overload requires a receiver of type 'Z'
-        // CS1935: Could not find an implementation of the query pattern for source type 'X' (missing System.Linq)
-        // CS8179: Predefined type 'System.ValueTuple`N' is not defined or imported
-        // CS0400: The type or namespace name 'X' could not be found in the global namespace
-        // CS0012: The type 'X' is defined in an assembly that is not referenced
-        private static readonly HashSet<string> TargetDiagnosticIds = new HashSet<string>(StringComparer.Ordinal)
+        // Diagnostics for missing types/namespaces
+        private static readonly HashSet<string> TypeDiagnosticIds = new HashSet<string>(StringComparer.Ordinal)
         {
-            "CS0103",
-            "CS0234",
-            "CS0246",
-            "CS0305",
-            "CS0308",
-            "CS0400",
-            "CS0426",
-            "CS0616",
-            "CS1061",
-            "CS1501",
-            "CS1503",
-            "CS1929",
-            "CS1935",
-            "CS8179",
+            "CS0103", // The name 'X' does not exist in the current context
+            "CS0234", // The type or namespace name 'X' does not exist in the namespace 'Y'
+            "CS0246", // The type or namespace name 'X' could not be found
+            "CS0305", // Using the generic type 'X<T>' requires N type arguments
+            "CS0308", // The non-generic type 'X' cannot be used with type arguments
+            "CS0400", // The type or namespace name 'X' could not be found in the global namespace
+            "CS0426", // The type name 'X' does not exist in the type 'Y'
+            "CS0616", // 'X' is not an attribute class
+            "CS1503", // Cannot convert from 'X' to 'Y'
+            "CS8179", // Predefined type 'System.ValueTuple`N' is not defined or imported
         };
+
+        // Diagnostics for missing extension methods
+        private static readonly HashSet<string> ExtensionMethodDiagnosticIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "CS1061", // 'X' does not contain a definition for 'Y' (extension methods)
+            "CS1929", // 'X' does not contain a definition for 'Y' and best extension method requires different receiver
+        };
+
+        // Diagnostics where the fix is almost always a specific namespace
+        private static readonly HashSet<string> QueryPatternDiagnosticIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "CS1935", // Could not find an implementation of the query pattern (missing System.Linq)
+        };
+
+        private static readonly HashSet<string> AllDiagnosticIds;
+
+        static MissingUsingsAnalyzer()
+        {
+            AllDiagnosticIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string id in TypeDiagnosticIds) AllDiagnosticIds.Add(id);
+            foreach (string id in ExtensionMethodDiagnosticIds) AllDiagnosticIds.Add(id);
+            foreach (string id in QueryPatternDiagnosticIds) AllDiagnosticIds.Add(id);
+        }
 
         private static readonly HashSet<string> CSharpKeywordsAndAliases = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -93,16 +97,44 @@ namespace OhUsings.Services
             var diagnostics = semanticModel.GetDiagnostics(cancellationToken: cancellationToken);
 
             var existingUsings = GetExistingUsings(syntaxRoot);
-            var unresolvedNames = ExtractUnresolvedNames(diagnostics, syntaxRoot);
+            var unresolvedEntries = ExtractUnresolvedEntries(diagnostics, syntaxRoot);
 
             var candidates = new List<MissingUsingCandidate>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (string typeName in unresolvedNames)
+            foreach (var entry in unresolvedEntries)
             {
-                var namespaces = await FindCandidateNamespacesAsync(
-                    typeName, document, existingUsings, cancellationToken);
+                // Deduplicate by name+kind
+                string key = $"{entry.Kind}:{entry.Name}";
+                if (!seen.Add(key))
+                    continue;
 
-                candidates.Add(new MissingUsingCandidate(typeName, namespaces));
+                IReadOnlyList<string> namespaces;
+
+                switch (entry.Kind)
+                {
+                    case UnresolvedKind.ExtensionMethod:
+                        namespaces = await FindExtensionMethodNamespacesAsync(
+                            entry.Name, document, existingUsings, cancellationToken);
+                        break;
+
+                    case UnresolvedKind.QueryPattern:
+                        // CS1935 almost always means System.Linq is missing
+                        namespaces = existingUsings.Contains("System.Linq")
+                            ? Array.Empty<string>()
+                            : new[] { "System.Linq" };
+                        break;
+
+                    default:
+                        namespaces = await FindCandidateNamespacesAsync(
+                            entry.Name, document, existingUsings, cancellationToken);
+                        break;
+                }
+
+                if (namespaces.Count > 0 || entry.Kind == UnresolvedKind.Type)
+                {
+                    candidates.Add(new MissingUsingCandidate(entry.Name, namespaces));
+                }
             }
 
             return candidates;
@@ -139,14 +171,39 @@ namespace OhUsings.Services
         }
 
         /// <summary>
-        /// Extracts unique unresolved type/identifier names from relevant diagnostics.
+        /// Classifies what kind of unresolved symbol we're dealing with.
         /// </summary>
-        internal IReadOnlyList<string> ExtractUnresolvedNames(
+        internal enum UnresolvedKind
+        {
+            Type,
+            ExtensionMethod,
+            QueryPattern
+        }
+
+        /// <summary>
+        /// An unresolved name extracted from a diagnostic, tagged with its kind.
+        /// </summary>
+        internal readonly struct UnresolvedEntry
+        {
+            public string Name { get; }
+            public UnresolvedKind Kind { get; }
+
+            public UnresolvedEntry(string name, UnresolvedKind kind)
+            {
+                Name = name;
+                Kind = kind;
+            }
+        }
+
+        /// <summary>
+        /// Extracts unresolved entries from diagnostics, classifying each by kind.
+        /// </summary>
+        internal IReadOnlyList<UnresolvedEntry> ExtractUnresolvedEntries(
             IEnumerable<Diagnostic> diagnostics,
             SyntaxNode root)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            var names = new List<string>();
+            var entries = new List<UnresolvedEntry>();
             int count = 0;
 
             foreach (var diagnostic in diagnostics)
@@ -154,11 +211,20 @@ namespace OhUsings.Services
                 if (count >= _options.MaxDiagnosticsPerDocument)
                     break;
 
-                if (!TargetDiagnosticIds.Contains(diagnostic.Id))
+                if (!AllDiagnosticIds.Contains(diagnostic.Id))
                     continue;
 
                 if (diagnostic.Location == null || !diagnostic.Location.IsInSource)
                     continue;
+
+                // Determine the kind
+                UnresolvedKind kind;
+                if (QueryPatternDiagnosticIds.Contains(diagnostic.Id))
+                    kind = UnresolvedKind.QueryPattern;
+                else if (ExtensionMethodDiagnosticIds.Contains(diagnostic.Id))
+                    kind = UnresolvedKind.ExtensionMethod;
+                else
+                    kind = UnresolvedKind.Type;
 
                 var span = diagnostic.Location.SourceSpan;
                 var node = root.FindNode(span, findInsideTrivia: false, getInnermostNodeForTie: true);
@@ -175,18 +241,36 @@ namespace OhUsings.Services
                 if (name.Length <= 1)
                     continue;
 
-                // Skip names starting with lowercase (likely local variables, not types)
-                if (char.IsLower(name[0]) && name != name.ToUpperInvariant())
+                // For type diagnostics, skip names starting with lowercase
+                // For extension methods, lowercase names are expected (e.g., .Where, .Select)
+                if (kind == UnresolvedKind.Type
+                    && char.IsLower(name[0])
+                    && name != name.ToUpperInvariant())
                     continue;
 
-                if (seen.Add(name))
+                string key = $"{kind}:{name}";
+                if (seen.Add(key))
                 {
-                    names.Add(name);
+                    entries.Add(new UnresolvedEntry(name, kind));
                     count++;
                 }
             }
 
-            return names;
+            return entries;
+        }
+
+        /// <summary>
+        /// Extracts unique unresolved type/identifier names from relevant diagnostics.
+        /// Kept for backward compatibility with tests.
+        /// </summary>
+        internal IReadOnlyList<string> ExtractUnresolvedNames(
+            IEnumerable<Diagnostic> diagnostics,
+            SyntaxNode root)
+        {
+            return ExtractUnresolvedEntries(diagnostics, root)
+                .Where(e => e.Kind == UnresolvedKind.Type)
+                .Select(e => e.Name)
+                .ToList();
         }
 
         private static string? ExtractTypeName(SyntaxNode? node)
@@ -248,6 +332,58 @@ namespace OhUsings.Services
                 .ToList();
 
             return namespaces;
+        }
+
+        /// <summary>
+        /// Searches the solution for extension methods with the given name.
+        /// Returns the distinct containing namespaces that are not already imported.
+        /// </summary>
+        internal static async Task<IReadOnlyList<string>> FindExtensionMethodNamespacesAsync(
+            string methodName,
+            Document document,
+            HashSet<string> existingUsings,
+            CancellationToken cancellationToken)
+        {
+            var compilation = await document.Project.GetCompilationAsync(cancellationToken);
+            if (compilation == null)
+                return Array.Empty<string>();
+
+            // Search for all declarations matching the method name
+            var symbols = await SymbolFinder.FindDeclarationsAsync(
+                document.Project,
+                methodName,
+                ignoreCase: false,
+                filter: SymbolFilter.Member,
+                cancellationToken: cancellationToken);
+
+            var namespaces = symbols
+                .OfType<IMethodSymbol>()
+                .Where(m => m.IsExtensionMethod)
+                .Where(m => IsMethodAccessible(m, compilation))
+                .Select(m => m.ContainingType?.ContainingNamespace)
+                .Where(ns => ns != null && !ns!.IsGlobalNamespace)
+                .Select(ns => ns!.ToDisplayString())
+                .Where(ns => !existingUsings.Contains(ns))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(ns => ns, StringComparer.Ordinal)
+                .ToList();
+
+            return namespaces;
+        }
+
+        private static bool IsMethodAccessible(IMethodSymbol method, Compilation compilation)
+        {
+            // The method itself must be public, and its containing static class must be accessible
+            if (method.DeclaredAccessibility != Accessibility.Public)
+                return false;
+
+            var containingType = method.ContainingType;
+            if (containingType == null)
+                return false;
+
+            return containingType.DeclaredAccessibility == Accessibility.Public
+                || (containingType.DeclaredAccessibility == Accessibility.Internal
+                    && compilation.Assembly.Name == containingType.ContainingAssembly?.Name);
         }
 
         private static bool IsAccessible(INamedTypeSymbol symbol, Compilation compilation)

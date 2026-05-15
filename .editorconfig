@@ -1,0 +1,7 @@
+[*.{cs,vb}]
+guidelines = 120
+
+#### Core EditorConfig Options ####
+
+#Formatting - header template
+file_header_template = ----------------------------------------------------------------------\nCopyright (c) 2026 Mabrouk Mahdhi & Wiem Ksaier. All rights reserved.\n----------------------------------------------------------------------

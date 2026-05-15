@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidOhUsingsPackage">
+
+    <Groups>
+      <Group guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS" />
+      </Group>
+      <Group guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CODEWIN" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidOhUsingsCmdSet" id="ImportAllMissingUsingsCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" />
+        <Strings>
+          <ButtonText>OhUsings: Import All Missing Usings</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidOhUsingsCmdSet" id="ImportAllMissingUsingsContextCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" />
+        <Strings>
+          <ButtonText>OhUsings: Import All Missing Usings</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidOhUsingsPackage" value="{d4e3f2a1-b5c6-4d7e-8f9a-0b1c2d3e4f50}" />
+    <GuidSymbol name="guidOhUsingsCmdSet" value="{e5f4a3b2-c6d7-4e8f-9a0b-1c2d3e4f5a61}">
+      <IDSymbol name="OhUsingsToolsMenuGroup" value="0x1020" />
+      <IDSymbol name="OhUsingsEditorContextMenuGroup" value="0x1021" />
+      <IDSymbol name="ImportAllMissingUsingsCommandId" value="0x0100" />
+      <IDSymbol name="ImportAllMissingUsingsContextCommandId" value="0x0101" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>

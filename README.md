@@ -1,81 +1,193 @@
-# OhUsings
+<p align="center">
+  <img src="Resources/OhUsingsIcon.png" alt="OhUsings logo" width="128" />
+</p>
 
-**OhUsings** adds a command to Visual Studio that imports all missing C# `using` directives in the current document at once — similar to JetBrains Rider's "Import Missing References" experience, focused on `using` directives.
+<h1 align="center">OhUsings</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <strong>Import all missing C# <code>using</code> directives in Visual Studio — in one click.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
+  <a href="https://visualstudio.microsoft.com/vs/"><img src="https://img.shields.io/badge/Visual%20Studio-2022-blue.svg" alt="VS 2022" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Roslyn-powered-blueviolet.svg" alt="Roslyn" /></a>
+</p>
+
+---
+
+Stop hunting for namespaces one red squiggle at a time. **OhUsings** scans your C# file (or your entire project/solution), resolves every missing type through Roslyn, and adds all safe `using` directives at once — sorted, formatted, and ready to go.
+
+## Why OhUsings?
+
+If you've ever opened a C# file full of unresolved types and found yourself pressing `Ctrl+.` over and over, you know the pain. Visual Studio's built-in "Add using" handles one type at a time. JetBrains Rider has "Import Missing References," but that requires switching IDEs.
+
+**OhUsings brings that workflow to Visual Studio** — with a safety-first approach that never guesses when a type is ambiguous.
 
 ## Features
 
-- **Import All Missing Usings** — Scans the active C# document for unresolved types and adds all safe, unambiguous `using` directives in one go.
-- **Ambiguity-safe** — Skips symbols that resolve to multiple namespaces and reports them in a summary.
-- **Sorted & clean** — Added `using` directives are alphabetically sorted and the document is formatted automatically.
-- **Non-invasive** — Only modifies the active document. Never adds NuGet packages or project references.
-- **Privacy-friendly** — No telemetry, no network calls.
+| Feature | Description |
+|---------|-------------|
+| **One-Click Import** | Adds all unambiguous `using` directives in a single operation |
+| **Three Scopes** | Run on the current file, the active project, or the entire solution |
+| **Light Bulb Actions** | Suggested actions appear inline — pick a namespace right from the editor |
+| **Ambiguity Dialog** | When a type maps to multiple namespaces, a picker lets you choose |
+| **Sorted & Formatted** | `System.*` namespaces first, alphabetically sorted, Roslyn-formatted |
+| **10+ Diagnostics** | Handles CS0246, CS0103, CS0234, CS1061, CS1935, and more |
+| **Extension Methods** | Detects missing `using` for LINQ and other extension methods |
+| **Privacy-First** | Zero telemetry, zero network calls — ever |
 
-## Installation
+## Quick Start
 
-### From VSIX (local)
+### Install
 
-1. Build the solution in Visual Studio 2022.
-2. Find `OhUsings.vsix` in the `bin/` output folder.
-3. Double-click the `.vsix` to install.
+**From Visual Studio Marketplace (recommended)**
+
+1. Open Visual Studio 2022.
+2. Go to **Extensions → Manage Extensions**.
+3. Search for **OhUsings**.
+4. Click **Download** and restart Visual Studio.
+
+Or install directly from: [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=mabroukmahdhi.OhUsings)
+
+**From VSIX (local build)**
+
+1. Build the solution in **Visual Studio 2022** (17.0+).
+2. Locate `OhUsings.vsix` in the `bin/` output.
+3. Double-click the `.vsix` file to install.
 4. Restart Visual Studio.
 
-### From Visual Studio Marketplace
+### Use
 
-> Coming soon.
+**Option A — Menu command**
 
-## Usage
+1. Open a C# file with unresolved types.
+2. Go to **Tools → OhUsings: Import All Missing Usings**.
+3. Done. Check the status bar for a summary.
 
-1. Open a C# file that has unresolved type references (red squiggles from missing `using` directives).
-2. Run the command via one of:
-   - **Tools → OhUsings: Import All Missing Usings**
-   - Right-click in the editor → **OhUsings: Import All Missing Usings**
-3. The extension will:
-   - Detect all unresolved type diagnostics.
-   - Resolve namespaces using Roslyn.
-   - Add all unambiguous `using` directives.
-   - Format and simplify the document.
-   - Show a summary in the status bar.
+**Option B — Context menu**
 
-## Current Limitations
+Right-click in the editor → **OhUsings: Import All Missing Usings**.
 
-- **v1 scope**: Only processes the active document (not solution-wide).
-- Only resolves types from assemblies already referenced by the project.
-- Does not add NuGet packages or project references.
-- Ambiguous imports (multiple candidate namespaces) are skipped and reported.
-- Primarily targets `CS0246` diagnostics; `CS0103` and `CS0234` are handled on a best-effort basis.
+**Option C — Light bulb**
+
+Place the caret on an unresolved type. Click the light bulb (or press `Ctrl+.`) and choose from the OhUsings suggested actions.
+
+### Handling Ambiguous Types
+
+When a type like `Timer` exists in multiple namespaces (`System.Timers`, `System.Threading`), OhUsings skips it during automatic import and opens the **Ambiguous Usings Dialog** so you can choose.
+
+## How It Works
+
+```
+┌─────────────────────────┐
+│  You invoke the command  │
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  ActiveDocumentService   │  Locates the Roslyn Document(s) for the scope
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  MissingUsingsAnalyzer   │  Reads compiler diagnostics, extracts type
+│                          │  names, resolves namespaces via SymbolFinder
+└────────────┬────────────┘
+             ▼
+        ┌────┴─────┐
+   Unambiguous   Ambiguous
+        │            │
+        ▼            ▼
+┌──────────────┐ ┌───────────────┐
+│ Auto-applied │ │ Reported /    │
+│ via Applier  │ │ Dialog shown  │
+└──────┬───────┘ └───────────────┘
+       ▼
+┌─────────────────────────┐
+│  UsingDirectiveApplier   │  Inserts, sorts, formats, applies changes
+└────────────┬────────────┘
+             ▼
+┌─────────────────────────┐
+│  NotificationService     │  Status bar + Output Window summary
+└─────────────────────────┘
+```
+
+Under the hood, OhUsings uses **Roslyn's semantic model** — not regex or text matching — to detect unresolved types and resolve namespaces. This means zero false positives from names that are already in scope.
+
+## Supported Diagnostics
+
+| ID | Meaning | Handling |
+|----|---------|----------|
+| CS0246 | Type or namespace not found | Primary — full resolution |
+| CS0103 | Name does not exist in current context | Full resolution |
+| CS0234 | Type/namespace does not exist in namespace | Full resolution |
+| CS0305, CS0308 | Generic type errors | Full resolution |
+| CS0400, CS0426, CS0616 | Type errors | Full resolution |
+| CS1503, CS8179 | Argument/type mismatch errors | Full resolution |
+| CS1061, CS1929 | Missing extension methods | Extension method search |
+| CS1935 | Missing query pattern | Auto-suggests `System.Linq` |
+
+## Configuration
+
+OhUsings includes a lightweight options system:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `SortUsings` | `true` | Sort `using` directives alphabetically after adding |
+| `PlaceSystemFirst` | `true` | Place `System.*` namespaces before third-party ones |
+| `MaxDiagnosticsPerDocument` | `200` | Cap on diagnostics processed per file (performance guard) |
+
+## Limitations
+
+- Resolves types only from assemblies already referenced by the project.
+- Does not add NuGet packages or project references (yet — see [roadmap](docs/roadmap.md)).
+- Ambiguous imports require manual resolution via the dialog or light bulb.
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for a detailed overview of the extension's design.
+The codebase follows a clean, interface-based design with four core services behind abstractions. See [docs/architecture.md](docs/architecture.md) for the full breakdown.
 
 ## Roadmap
 
-See [docs/roadmap.md](docs/roadmap.md) for planned future features.
+Key planned features include a configurable keyboard shortcut, solution-wide preview/diff, NuGet package suggestions, and global usings support. See [docs/roadmap.md](docs/roadmap.md) for the complete plan.
 
 ## Contributing
 
-Contributions are welcome! Here's how to get started:
+Contributions are welcome!
 
 1. Fork the repository.
 2. Create a feature branch: `git checkout -b feature/my-feature`.
 3. Make your changes with tests.
-4. Ensure the solution builds and tests pass.
+4. Ensure the solution builds and all tests pass.
 5. Submit a pull request.
 
 ### Development Setup
 
-- Visual Studio 2022 with the **Visual Studio extension development** workload.
-- .NET Framework 4.7.2+ (for VSIX project).
-- The solution uses Roslyn APIs from the VS SDK.
+| Requirement | Details |
+|-------------|---------|
+| IDE | Visual Studio 2022 with the **Visual Studio extension development** workload |
+| Framework | .NET Framework 4.7.2+ |
+| APIs | Roslyn (via VS SDK) |
+
+### Running Tests
+
+Open Test Explorer in Visual Studio and run all tests, or use the CLI:
+
+```bash
+dotnet test tests/OhUsings.Tests/OhUsings.Tests.csproj
+```
 
 ### Code Style
 
-- Follow the `.editorconfig` rules in the repository.
+- Follow the `.editorconfig` rules.
 - Keep classes small and focused.
 - Add XML doc comments for public APIs.
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  Made with ☕ by <a href="https://github.com/MabroukMahdhi">Mabrouk Mahdhi</a> and <a href="https://github.com/wiemksaier">Wiem Ksaier</a>
+</p>

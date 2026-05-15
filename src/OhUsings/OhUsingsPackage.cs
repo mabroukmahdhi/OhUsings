@@ -62,6 +62,7 @@ namespace OhUsings
                 // Initialize the command
                 await ImportAllMissingUsingsCommand.InitializeAsync(
                     this,
+                    workspace,
                     activeDocumentService,
                     analyzer,
                     applier,

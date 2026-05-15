@@ -55,6 +55,12 @@ namespace OhUsings.Services
             foreach (string id in QueryPatternDiagnosticIds) AllDiagnosticIds.Add(id);
         }
 
+        /// <summary>
+        /// Returns true if the diagnostic ID is one that OhUsings can potentially resolve.
+        /// </summary>
+        public static bool IsSupportedDiagnostic(string diagnosticId) =>
+            AllDiagnosticIds.Contains(diagnosticId);
+
         private static readonly HashSet<string> CSharpKeywordsAndAliases = new HashSet<string>(StringComparer.Ordinal)
         {
             "bool", "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong",

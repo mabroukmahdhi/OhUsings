@@ -2,14 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.VisualStudio.LanguageServices;
 using Microsoft.VisualStudio.Shell;
 using OhUsings.Models;
 using OhUsings.Services;
-using OhUsings.UI;
 using Task = System.Threading.Tasks.Task;
+using Tasks = System.Threading.Tasks;
 
 namespace OhUsings.Commands
 {
@@ -26,12 +28,10 @@ namespace OhUsings.Commands
     /// <summary>
     /// Command handler for the three OhUsings import commands:
     /// Add in Current File, Add in Current Project, Add in Solution.
+    /// Automatically adds all unambiguous usings and silently skips ambiguous ones.
     /// </summary>
     internal sealed class ImportAllMissingUsingsCommand
     {
-        /// <summary>
-        /// Command set GUID — must match guidOhUsingsCmdSet in the .vsct file.
-        /// </summary>
         public static readonly Guid CommandSet = new Guid("e5f4a3b2-c6d7-4e8f-9a0b-1c2d3e4f5a61");
 
         public const int ImportCurrentFileCommandId = 0x0100;
@@ -39,6 +39,7 @@ namespace OhUsings.Commands
         public const int ImportSolutionCommandId = 0x0102;
 
         private readonly AsyncPackage _package;
+        private readonly VisualStudioWorkspace _workspace;
         private readonly IActiveDocumentService _activeDocumentService;
         private readonly IMissingUsingsAnalyzer _analyzer;
         private readonly IUsingDirectiveApplier _applier;
@@ -47,19 +48,18 @@ namespace OhUsings.Commands
         private ImportAllMissingUsingsCommand(
             AsyncPackage package,
             OleMenuCommandService commandService,
+            VisualStudioWorkspace workspace,
             IActiveDocumentService activeDocumentService,
             IMissingUsingsAnalyzer analyzer,
             IUsingDirectiveApplier applier,
             INotificationService notificationService)
         {
             _package = package ?? throw new ArgumentNullException(nameof(package));
+            _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
             _activeDocumentService = activeDocumentService ?? throw new ArgumentNullException(nameof(activeDocumentService));
             _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
             _applier = applier ?? throw new ArgumentNullException(nameof(applier));
             _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
-
-            if (commandService == null)
-                throw new ArgumentNullException(nameof(commandService));
 
             RegisterCommand(commandService, ImportCurrentFileCommandId, ImportScope.CurrentFile);
             RegisterCommand(commandService, ImportCurrentProjectCommandId, ImportScope.CurrentProject);
@@ -75,16 +75,11 @@ namespace OhUsings.Commands
             commandService.AddCommand(menuItem);
         }
 
-        /// <summary>
-        /// Singleton instance.
-        /// </summary>
         public static ImportAllMissingUsingsCommand? Instance { get; private set; }
 
-        /// <summary>
-        /// Initializes and registers all three commands.
-        /// </summary>
         public static async Task InitializeAsync(
             AsyncPackage package,
+            VisualStudioWorkspace workspace,
             IActiveDocumentService activeDocumentService,
             IMissingUsingsAnalyzer analyzer,
             IUsingDirectiveApplier applier,
@@ -100,6 +95,7 @@ namespace OhUsings.Commands
                 Instance = new ImportAllMissingUsingsCommand(
                     package,
                     commandService,
+                    workspace,
                     activeDocumentService,
                     analyzer,
                     applier,
@@ -128,68 +124,58 @@ namespace OhUsings.Commands
                 }
                 catch (OperationCanceledException)
                 {
-                    // User or system cancellation — do nothing
+                    // Silently ignore cancellation
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[OhUsings] Unexpected error: {ex}");
-
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                    _notificationService.ShowError(
-                        $"An unexpected error occurred: {ex.Message}");
+                    _notificationService.ShowError($"An unexpected error occurred: {ex.Message}");
                 }
             });
         }
 
+        /// <summary>
+        /// Collects all document file paths for the given scope, then processes each one
+        /// by re-fetching the document from the workspace before each analysis + apply cycle.
+        /// This ensures we always work with the latest solution snapshot.
+        /// </summary>
         private async Task ExecuteAsync(ImportScope scope)
         {
-            IReadOnlyList<Document> documents;
-            string scopeLabel;
+            // Collect document file paths (stable identifiers that survive workspace changes)
+            var docPaths = await GetDocumentPathsAsync(scope);
 
-            switch (scope)
-            {
-                case ImportScope.CurrentProject:
-                    documents = await _activeDocumentService.GetCurrentProjectDocumentsAsync();
-                    scopeLabel = "project";
-                    break;
-
-                case ImportScope.Solution:
-                    documents = await _activeDocumentService.GetSolutionDocumentsAsync();
-                    scopeLabel = "solution";
-                    break;
-
-                default: // CurrentFile
-                    var activeDoc = await _activeDocumentService.GetActiveDocumentAsync();
-                    documents = activeDoc != null
-                        ? new[] { activeDoc }
-                        : Array.Empty<Document>();
-                    scopeLabel = "file";
-                    break;
-            }
-
-            if (documents.Count == 0)
+            if (docPaths.Count == 0)
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 _notificationService.ShowInfo(
                     scope == ImportScope.CurrentFile
                         ? "OhUsings: No active C# document found."
-                        : $"OhUsings: No C# documents found in {scopeLabel}.");
+                        : $"OhUsings: No C# documents found in {scope}.");
                 return;
             }
 
+            string scopeLabel = scope == ImportScope.CurrentFile ? "file"
+                : scope == ImportScope.CurrentProject ? "project" : "solution";
+
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             _notificationService.ShowInfo(
-                documents.Count == 1
+                docPaths.Count == 1
                     ? "OhUsings: Analyzing document..."
-                    : $"OhUsings: Analyzing {documents.Count} documents in {scopeLabel}...");
+                    : $"OhUsings: Analyzing {docPaths.Count} documents in {scopeLabel}...");
 
             var totalAdded = new List<string>();
             var totalAmbiguous = new List<AmbiguousImport>();
             var totalUnresolved = new List<string>();
             int filesChanged = 0;
 
-            foreach (var document in documents)
+            foreach (var filePath in docPaths)
             {
+                // Re-fetch the document from the CURRENT workspace snapshot
+                var document = FindDocumentByPath(filePath);
+                if (document == null)
+                    continue;
+
                 var candidates = await _analyzer.AnalyzeAsync(document, CancellationToken.None);
                 if (candidates.Count == 0)
                     continue;
@@ -205,8 +191,7 @@ namespace OhUsings.Commands
                     else if (candidate.IsAmbiguous)
                     {
                         totalAmbiguous.Add(new AmbiguousImport(
-                            candidate.TypeName,
-                            candidate.CandidateNamespaces));
+                            candidate.TypeName, candidate.CandidateNamespaces));
                     }
                     else if (candidate.IsUnresolved)
                     {
@@ -218,93 +203,77 @@ namespace OhUsings.Commands
 
                 if (safeNamespaces.Count > 0)
                 {
-                    await _applier.ApplyAsync(document, safeNamespaces, CancellationToken.None);
-                    totalAdded.AddRange(safeNamespaces);
-                    filesChanged++;
+                    // Re-fetch again right before applying (another file might have changed the solution)
+                    document = FindDocumentByPath(filePath);
+                    if (document != null)
+                    {
+                        await _applier.ApplyAsync(document, safeNamespaces, CancellationToken.None);
+                        totalAdded.AddRange(safeNamespaces);
+                        filesChanged++;
+                    }
                 }
             }
 
-            // Deduplicate totals for the summary
+            // Deduplicate
             var uniqueAdded = totalAdded.Distinct(StringComparer.Ordinal).ToList();
             var uniqueUnresolved = totalUnresolved.Distinct(StringComparer.Ordinal).ToList();
-
-            // Deduplicate ambiguous by type name
             var uniqueAmbiguous = totalAmbiguous
                 .GroupBy(a => a.TypeName, StringComparer.Ordinal)
                 .Select(g => g.First())
                 .ToList();
 
-            // If there are ambiguous imports, show the resolution dialog
-            if (uniqueAmbiguous.Count > 0)
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                var dialog = new AmbiguousUsingsDialog(uniqueAmbiguous, scope);
-                dialog.ShowModal();
-
-                if (dialog.Applied)
-                {
-                    var resolved = dialog.GetResolvedImports();
-                    if (resolved.Count > 0)
-                    {
-                        var namespacesToApply = resolved
-                            .Select(r => r.Namespace)
-                            .Distinct(StringComparer.Ordinal)
-                            .ToList();
-
-                        var applyScope = dialog.SelectedScope;
-
-                        IReadOnlyList<Document> applyDocuments;
-                        switch (applyScope)
-                        {
-                            case ImportScope.CurrentProject:
-                                applyDocuments = await _activeDocumentService.GetCurrentProjectDocumentsAsync();
-                                break;
-                            case ImportScope.Solution:
-                                applyDocuments = await _activeDocumentService.GetSolutionDocumentsAsync();
-                                break;
-                            default:
-                                var activeDoc = await _activeDocumentService.GetActiveDocumentAsync();
-                                applyDocuments = activeDoc != null
-                                    ? new[] { activeDoc }
-                                    : Array.Empty<Document>();
-                                break;
-                        }
-
-                        int resolvedFilesChanged = 0;
-                        foreach (var doc in applyDocuments)
-                        {
-                            await _applier.ApplyAsync(doc, namespacesToApply, CancellationToken.None);
-                            resolvedFilesChanged++;
-                        }
-
-                        totalAdded.AddRange(namespacesToApply);
-                        filesChanged += resolvedFilesChanged;
-
-                        // Recalculate uniqueAdded
-                        uniqueAdded = totalAdded.Distinct(StringComparer.Ordinal).ToList();
-
-                        // Remove resolved entries from ambiguous list
-                        var resolvedTypes = new HashSet<string>(
-                            resolved.Select(r => r.TypeName), StringComparer.Ordinal);
-                        uniqueAmbiguous = uniqueAmbiguous
-                            .Where(a => !resolvedTypes.Contains(a.TypeName))
-                            .ToList();
-                    }
-                }
-            }
-
             var result = new ImportResult(uniqueAdded, uniqueAmbiguous, uniqueUnresolved);
 
-            // Enhance message for multi-file scopes
             string message = result.Message;
-            if (filesChanged > 0 && documents.Count > 1)
+            if (filesChanged > 0 && docPaths.Count > 1)
             {
                 message += $" ({filesChanged} file(s) changed)";
             }
 
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             _notificationService.ShowInfo(message);
+        }
+
+        /// <summary>
+        /// Gets file paths for all documents in the requested scope.
+        /// </summary>
+        private async Tasks::Task<IReadOnlyList<string>> GetDocumentPathsAsync(ImportScope scope)
+        {
+            IReadOnlyList<Document> docs;
+            switch (scope)
+            {
+                case ImportScope.CurrentProject:
+                    docs = await _activeDocumentService.GetCurrentProjectDocumentsAsync();
+                    break;
+                case ImportScope.Solution:
+                    docs = await _activeDocumentService.GetSolutionDocumentsAsync();
+                    break;
+                default:
+                    var activeDoc = await _activeDocumentService.GetActiveDocumentAsync();
+                    docs = activeDoc != null ? new[] { activeDoc } : Array.Empty<Document>();
+                    break;
+            }
+
+            return docs
+                .Where(d => d.FilePath != null)
+                .Select(d => Path.GetFullPath(d.FilePath!))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Finds a document in the current workspace snapshot by its file path.
+        /// </summary>
+        private Document? FindDocumentByPath(string filePath)
+        {
+            return _workspace.CurrentSolution.Projects
+                .SelectMany(p => p.Documents)
+                .FirstOrDefault(d =>
+                    d.FilePath != null &&
+                    string.Equals(
+                        Path.GetFullPath(d.FilePath),
+                        filePath,
+                        StringComparison.OrdinalIgnoreCase));
         }
     }
 }

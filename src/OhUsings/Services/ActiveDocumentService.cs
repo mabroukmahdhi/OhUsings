@@ -1,3 +1,7 @@
+// ----------------------------------------------------------------------
+// Copyright (c) 2026 Mabrouk Mahdhi & Wiem Ksaier. All rights reserved.
+// ----------------------------------------------------------------------
+
 using System;
 using System.IO;
 using System.Linq;
@@ -25,22 +29,28 @@ namespace OhUsings.Services
         }
 
         /// <inheritdoc />
-        public async Task<Document?> GetActiveDocumentAsync()
+        public async Task<Microsoft.CodeAnalysis.Document?> GetActiveDocumentAsync()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             var dte = await _package.GetServiceAsync(typeof(DTE)) as DTE2;
             if (dte?.ActiveDocument == null)
+            {
                 return null;
+            }
 
             string activeFilePath = dte.ActiveDocument.FullName;
 
             if (string.IsNullOrEmpty(activeFilePath))
+            {
                 return null;
+            }
 
             // Only handle C# files
             if (!activeFilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            {
                 return null;
+            }
 
             string normalizedPath = Path.GetFullPath(activeFilePath);
 

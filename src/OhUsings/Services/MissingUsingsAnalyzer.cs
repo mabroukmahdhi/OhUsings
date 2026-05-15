@@ -17,14 +17,38 @@ namespace OhUsings.Services
     /// </summary>
     public sealed class MissingUsingsAnalyzer : IMissingUsingsAnalyzer
     {
-        // CS0246: The type or namespace name 'X' could not be found
         // CS0103: The name 'X' does not exist in the current context
         // CS0234: The type or namespace name 'X' does not exist in the namespace 'Y'
+        // CS0246: The type or namespace name 'X' could not be found
+        // CS0305: Using the generic type 'X<T>' requires N type arguments
+        // CS0308: The non-generic type 'X' cannot be used with type arguments
+        // CS0426: The type name 'X' does not exist in the type 'Y'
+        // CS0616: 'X' is not an attribute class
+        // CS0619: 'X' is obsolete (can surface when wrong type is resolved)
+        // CS1061: 'X' does not contain a definition for 'Y' (extension methods)
+        // CS1501: No overload for method 'X' takes N arguments (extension methods)
+        // CS1503: Cannot convert from 'X' to 'Y'
+        // CS1929: 'X' does not contain a definition for 'Y' and the best extension method overload requires a receiver of type 'Z'
+        // CS1935: Could not find an implementation of the query pattern for source type 'X' (missing System.Linq)
+        // CS8179: Predefined type 'System.ValueTuple`N' is not defined or imported
+        // CS0400: The type or namespace name 'X' could not be found in the global namespace
+        // CS0012: The type 'X' is defined in an assembly that is not referenced
         private static readonly HashSet<string> TargetDiagnosticIds = new HashSet<string>(StringComparer.Ordinal)
         {
-            "CS0246",
             "CS0103",
-            "CS0234"
+            "CS0234",
+            "CS0246",
+            "CS0305",
+            "CS0308",
+            "CS0400",
+            "CS0426",
+            "CS0616",
+            "CS1061",
+            "CS1501",
+            "CS1503",
+            "CS1929",
+            "CS1935",
+            "CS8179",
         };
 
         private static readonly HashSet<string> CSharpKeywordsAndAliases = new HashSet<string>(StringComparer.Ordinal)

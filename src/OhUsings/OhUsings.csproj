@@ -16,6 +16,8 @@
     <IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
     <CopyBuildOutputToOutputDirectory>true</CopyBuildOutputToOutputDirectory>
     <CopyOutputSymbolsToOutputDirectory>false</CopyOutputSymbolsToOutputDirectory>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <StartAction>Program</StartAction>
     <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
     <StartArguments>/rootsuffix Exp</StartArguments>
@@ -23,10 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.0.32112.339" ExcludeAssets="runtime" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.0.5232">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.0.5232" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="4.4.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.4.0" />
     <PackageReference Include="Microsoft.VisualStudio.LanguageServices" Version="4.4.0" />
@@ -40,6 +39,11 @@
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>
     </None>
+    <Content Include="..\..\LICENSE">
+      <Link>LICENSE</Link>
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <VSCTCompile Include="Resources\OhUsingsPackage.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>

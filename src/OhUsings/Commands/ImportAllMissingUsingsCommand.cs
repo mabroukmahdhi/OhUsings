@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.VisualStudio.Shell;
 using OhUsings.Models;
 using OhUsings.Services;
+using OhUsings.UI;
 using Task = System.Threading.Tasks.Task;
 
 namespace OhUsings.Commands
@@ -17,9 +18,9 @@ namespace OhUsings.Commands
     /// </summary>
     internal enum ImportScope
     {
-        CurrentFile,
-        CurrentProject,
-        Solution
+        CurrentFile = 0,
+        CurrentProject = 1,
+        Solution = 2
     }
 
     /// <summary>
@@ -233,11 +234,71 @@ namespace OhUsings.Commands
                 .Select(g => g.First())
                 .ToList();
 
+            // If there are ambiguous imports, show the resolution dialog
+            if (uniqueAmbiguous.Count > 0)
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                var dialog = new AmbiguousUsingsDialog(uniqueAmbiguous, scope);
+                dialog.ShowModal();
+
+                if (dialog.Applied)
+                {
+                    var resolved = dialog.GetResolvedImports();
+                    if (resolved.Count > 0)
+                    {
+                        var namespacesToApply = resolved
+                            .Select(r => r.Namespace)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToList();
+
+                        var applyScope = dialog.SelectedScope;
+
+                        IReadOnlyList<Document> applyDocuments;
+                        switch (applyScope)
+                        {
+                            case ImportScope.CurrentProject:
+                                applyDocuments = await _activeDocumentService.GetCurrentProjectDocumentsAsync();
+                                break;
+                            case ImportScope.Solution:
+                                applyDocuments = await _activeDocumentService.GetSolutionDocumentsAsync();
+                                break;
+                            default:
+                                var activeDoc = await _activeDocumentService.GetActiveDocumentAsync();
+                                applyDocuments = activeDoc != null
+                                    ? new[] { activeDoc }
+                                    : Array.Empty<Document>();
+                                break;
+                        }
+
+                        int resolvedFilesChanged = 0;
+                        foreach (var doc in applyDocuments)
+                        {
+                            await _applier.ApplyAsync(doc, namespacesToApply, CancellationToken.None);
+                            resolvedFilesChanged++;
+                        }
+
+                        totalAdded.AddRange(namespacesToApply);
+                        filesChanged += resolvedFilesChanged;
+
+                        // Recalculate uniqueAdded
+                        uniqueAdded = totalAdded.Distinct(StringComparer.Ordinal).ToList();
+
+                        // Remove resolved entries from ambiguous list
+                        var resolvedTypes = new HashSet<string>(
+                            resolved.Select(r => r.TypeName), StringComparer.Ordinal);
+                        uniqueAmbiguous = uniqueAmbiguous
+                            .Where(a => !resolvedTypes.Contains(a.TypeName))
+                            .ToList();
+                    }
+                }
+            }
+
             var result = new ImportResult(uniqueAdded, uniqueAmbiguous, uniqueUnresolved);
 
             // Enhance message for multi-file scopes
             string message = result.Message;
-            if (documents.Count > 1 && filesChanged > 0)
+            if (filesChanged > 0 && documents.Count > 1)
             {
                 message += $" ({filesChanged} file(s) changed)";
             }

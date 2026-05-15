@@ -5,18 +5,16 @@
   <Extern href="stdidcmd.h" />
   <Extern href="vsshlids.h" />
 
-  <Commands package="guidOhUsingsPackage">
+  <Include href="KnownImageIds.vsct" />
 
-    <Bitmaps>
-      <Bitmap guid="guidCommandIcons" href="CommandIcons.png"
-              usedList="bmpSubmenu, bmpFile, bmpProject, bmpSolution" />
-    </Bitmaps>
+  <Commands package="guidOhUsingsPackage">
 
     <Menus>
       <!-- Submenu that appears in the editor context menu -->
       <Menu guid="guidOhUsingsCmdSet" id="OhUsingsSubMenu" priority="0x0600" type="Menu">
         <Parent guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" />
-        <Icon guid="guidCommandIcons" id="bmpSubmenu" />
+        <Icon guid="ImageCatalogGuid" id="AddNamespace" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>OhUsings</ButtonText>
         </Strings>
@@ -24,7 +22,8 @@
       <!-- Submenu that appears in the Tools menu -->
       <Menu guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenu" priority="0x0600" type="Menu">
         <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" />
-        <Icon guid="guidCommandIcons" id="bmpSubmenu" />
+        <Icon guid="ImageCatalogGuid" id="AddNamespace" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>OhUsings</ButtonText>
         </Strings>
@@ -54,7 +53,8 @@
       <!-- Current File -->
       <Button guid="guidOhUsingsCmdSet" id="ImportCurrentFileCommandId" priority="0x0100" type="Button">
         <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
-        <Icon guid="guidCommandIcons" id="bmpFile" />
+        <Icon guid="ImageCatalogGuid" id="CSFileNode" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Add in Current File</ButtonText>
         </Strings>
@@ -62,7 +62,8 @@
       <!-- Current Project -->
       <Button guid="guidOhUsingsCmdSet" id="ImportCurrentProjectCommandId" priority="0x0200" type="Button">
         <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
-        <Icon guid="guidCommandIcons" id="bmpProject" />
+        <Icon guid="ImageCatalogGuid" id="CSProjectNode" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Add in Current Project</ButtonText>
         </Strings>
@@ -70,7 +71,8 @@
       <!-- Entire Solution -->
       <Button guid="guidOhUsingsCmdSet" id="ImportSolutionCommandId" priority="0x0300" type="Button">
         <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
-        <Icon guid="guidCommandIcons" id="bmpSolution" />
+        <Icon guid="ImageCatalogGuid" id="Solution" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
         <Strings>
           <ButtonText>Add in Solution</ButtonText>
         </Strings>
@@ -104,12 +106,6 @@
       <IDSymbol name="ImportCurrentFileCommandId" value="0x0100" />
       <IDSymbol name="ImportCurrentProjectCommandId" value="0x0101" />
       <IDSymbol name="ImportSolutionCommandId" value="0x0102" />
-    </GuidSymbol>
-    <GuidSymbol name="guidCommandIcons" value="{b1a2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d}">
-      <IDSymbol name="bmpSubmenu" value="1" />
-      <IDSymbol name="bmpFile" value="2" />
-      <IDSymbol name="bmpProject" value="3" />
-      <IDSymbol name="bmpSolution" value="4" />
     </GuidSymbol>
   </Symbols>
 

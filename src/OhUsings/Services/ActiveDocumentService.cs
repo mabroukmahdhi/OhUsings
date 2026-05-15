@@ -3,6 +3,7 @@
 // ----------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -64,6 +65,31 @@ namespace OhUsings.Services
                         StringComparison.OrdinalIgnoreCase));
 
             return document;
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<Microsoft.CodeAnalysis.Document>> GetCurrentProjectDocumentsAsync()
+        {
+            var activeDoc = await GetActiveDocumentAsync();
+            if (activeDoc == null)
+                return Array.Empty<Microsoft.CodeAnalysis.Document>();
+
+            return activeDoc.Project.Documents
+                .Where(d => d.FilePath != null
+                    && d.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<Microsoft.CodeAnalysis.Document>> GetSolutionDocumentsAsync()
+        {
+            // Ensure workspace is accessible (needs UI thread for DTE, but workspace is thread-safe)
+            return _workspace.CurrentSolution.Projects
+                .Where(p => p.Language == LanguageNames.CSharp)
+                .SelectMany(p => p.Documents)
+                .Where(d => d.FilePath != null
+                    && d.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                .ToList();
         }
     }
 }

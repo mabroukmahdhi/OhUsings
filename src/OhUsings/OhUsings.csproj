@@ -47,6 +47,11 @@
     <VSCTCompile Include="Resources\OhUsingsPackage.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
+    <Content Include="Resources\OhUsingsIcon.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Resource Include="Resources\CommandIcons.png" />
   </ItemGroup>
 
 </Project>

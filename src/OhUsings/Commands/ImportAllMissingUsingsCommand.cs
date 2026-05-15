@@ -4,6 +4,7 @@ using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using Microsoft.CodeAnalysis;
 using Microsoft.VisualStudio.Shell;
 using OhUsings.Models;
 using OhUsings.Services;
@@ -12,25 +13,29 @@ using Task = System.Threading.Tasks.Task;
 namespace OhUsings.Commands
 {
     /// <summary>
-    /// Command handler for "OhUsings: Import All Missing Usings".
-    /// Registered in both the Tools menu and the C# editor context menu.
+    /// The scope at which to import missing usings.
+    /// </summary>
+    internal enum ImportScope
+    {
+        CurrentFile,
+        CurrentProject,
+        Solution
+    }
+
+    /// <summary>
+    /// Command handler for the three OhUsings import commands:
+    /// Add in Current File, Add in Current Project, Add in Solution.
     /// </summary>
     internal sealed class ImportAllMissingUsingsCommand
     {
         /// <summary>
-        /// Command set GUID — must match the guidOhUsingsCmdSet in the .vsct file.
+        /// Command set GUID — must match guidOhUsingsCmdSet in the .vsct file.
         /// </summary>
         public static readonly Guid CommandSet = new Guid("e5f4a3b2-c6d7-4e8f-9a0b-1c2d3e4f5a61");
 
-        /// <summary>
-        /// Tools menu command ID — must match ImportAllMissingUsingsCommandId in .vsct.
-        /// </summary>
-        public const int ToolsMenuCommandId = 0x0100;
-
-        /// <summary>
-        /// Context menu command ID — must match ImportAllMissingUsingsContextCommandId in .vsct.
-        /// </summary>
-        public const int ContextMenuCommandId = 0x0101;
+        public const int ImportCurrentFileCommandId = 0x0100;
+        public const int ImportCurrentProjectCommandId = 0x0101;
+        public const int ImportSolutionCommandId = 0x0102;
 
         private readonly AsyncPackage _package;
         private readonly IActiveDocumentService _activeDocumentService;
@@ -55,17 +60,18 @@ namespace OhUsings.Commands
             if (commandService == null)
                 throw new ArgumentNullException(nameof(commandService));
 
-            // Register the tools menu command
-            var toolsMenuId = new CommandID(CommandSet, ToolsMenuCommandId);
-            var toolsMenuItem = new OleMenuCommand(Execute, toolsMenuId);
-            toolsMenuItem.BeforeQueryStatus += OnBeforeQueryStatus;
-            commandService.AddCommand(toolsMenuItem);
+            RegisterCommand(commandService, ImportCurrentFileCommandId, ImportScope.CurrentFile);
+            RegisterCommand(commandService, ImportCurrentProjectCommandId, ImportScope.CurrentProject);
+            RegisterCommand(commandService, ImportSolutionCommandId, ImportScope.Solution);
+        }
 
-            // Register the context menu command
-            var contextMenuId = new CommandID(CommandSet, ContextMenuCommandId);
-            var contextMenuItem = new OleMenuCommand(Execute, contextMenuId);
-            contextMenuItem.BeforeQueryStatus += OnBeforeQueryStatus;
-            commandService.AddCommand(contextMenuItem);
+        private void RegisterCommand(OleMenuCommandService commandService, int commandId, ImportScope scope)
+        {
+            var menuCommandId = new CommandID(CommandSet, commandId);
+            var menuItem = new OleMenuCommand(
+                (s, e) => ExecuteWithScope(scope), menuCommandId);
+            menuItem.BeforeQueryStatus += OnBeforeQueryStatus;
+            commandService.AddCommand(menuItem);
         }
 
         /// <summary>
@@ -74,7 +80,7 @@ namespace OhUsings.Commands
         public static ImportAllMissingUsingsCommand? Instance { get; private set; }
 
         /// <summary>
-        /// Initializes the command and registers it with the command service.
+        /// Initializes and registers all three commands.
         /// </summary>
         public static async Task InitializeAsync(
             AsyncPackage package,
@@ -100,32 +106,24 @@ namespace OhUsings.Commands
             }
         }
 
-        /// <summary>
-        /// Controls command visibility — only enabled when a C# document is active.
-        /// </summary>
         private void OnBeforeQueryStatus(object sender, EventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
             if (sender is OleMenuCommand command)
             {
-                // Enable by default; the Execute handler will validate the document
                 command.Visible = true;
                 command.Enabled = true;
             }
         }
 
-        /// <summary>
-        /// Executes the command — the main entry point for the Import All Missing Usings operation.
-        /// </summary>
-        private void Execute(object sender, EventArgs e)
+        private void ExecuteWithScope(ImportScope scope)
         {
-            // Fire-and-forget with proper exception handling
             _ = _package.JoinableTaskFactory.RunAsync(async () =>
             {
                 try
                 {
-                    await ExecuteAsync();
+                    await ExecuteAsync(scope);
                 }
                 catch (OperationCanceledException)
                 {
@@ -142,67 +140,110 @@ namespace OhUsings.Commands
             });
         }
 
-        private async Task ExecuteAsync()
+        private async Task ExecuteAsync(ImportScope scope)
         {
-            // Step 1: Get the active C# document
-            var document = await _activeDocumentService.GetActiveDocumentAsync();
-            if (document == null)
+            IReadOnlyList<Document> documents;
+            string scopeLabel;
+
+            switch (scope)
+            {
+                case ImportScope.CurrentProject:
+                    documents = await _activeDocumentService.GetCurrentProjectDocumentsAsync();
+                    scopeLabel = "project";
+                    break;
+
+                case ImportScope.Solution:
+                    documents = await _activeDocumentService.GetSolutionDocumentsAsync();
+                    scopeLabel = "solution";
+                    break;
+
+                default: // CurrentFile
+                    var activeDoc = await _activeDocumentService.GetActiveDocumentAsync();
+                    documents = activeDoc != null
+                        ? new[] { activeDoc }
+                        : Array.Empty<Document>();
+                    scopeLabel = "file";
+                    break;
+            }
+
+            if (documents.Count == 0)
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                _notificationService.ShowInfo("OhUsings: No active C# document found.");
+                _notificationService.ShowInfo(
+                    scope == ImportScope.CurrentFile
+                        ? "OhUsings: No active C# document found."
+                        : $"OhUsings: No C# documents found in {scopeLabel}.");
                 return;
             }
 
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            _notificationService.ShowInfo("OhUsings: Analyzing document...");
+            _notificationService.ShowInfo(
+                documents.Count == 1
+                    ? "OhUsings: Analyzing document..."
+                    : $"OhUsings: Analyzing {documents.Count} documents in {scopeLabel}...");
 
-            // Step 2: Analyze the document for missing usings
-            var candidates = await _analyzer.AnalyzeAsync(document, CancellationToken.None);
+            var totalAdded = new List<string>();
+            var totalAmbiguous = new List<AmbiguousImport>();
+            var totalUnresolved = new List<string>();
+            int filesChanged = 0;
 
-            if (candidates.Count == 0)
+            foreach (var document in documents)
             {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                _notificationService.ShowInfo("OhUsings: No missing using directives found.");
-                return;
+                var candidates = await _analyzer.AnalyzeAsync(document, CancellationToken.None);
+                if (candidates.Count == 0)
+                    continue;
+
+                var safeNamespaces = new List<string>();
+
+                foreach (var candidate in candidates)
+                {
+                    if (candidate.IsUnambiguous)
+                    {
+                        safeNamespaces.Add(candidate.CandidateNamespaces[0]);
+                    }
+                    else if (candidate.IsAmbiguous)
+                    {
+                        totalAmbiguous.Add(new AmbiguousImport(
+                            candidate.TypeName,
+                            candidate.CandidateNamespaces));
+                    }
+                    else if (candidate.IsUnresolved)
+                    {
+                        totalUnresolved.Add(candidate.TypeName);
+                    }
+                }
+
+                safeNamespaces = safeNamespaces.Distinct(StringComparer.Ordinal).ToList();
+
+                if (safeNamespaces.Count > 0)
+                {
+                    await _applier.ApplyAsync(document, safeNamespaces, CancellationToken.None);
+                    totalAdded.AddRange(safeNamespaces);
+                    filesChanged++;
+                }
             }
 
-            // Step 3: Categorize results
-            var safeNamespaces = new List<string>();
-            var ambiguousImports = new List<AmbiguousImport>();
-            var unresolvedNames = new List<string>();
+            // Deduplicate totals for the summary
+            var uniqueAdded = totalAdded.Distinct(StringComparer.Ordinal).ToList();
+            var uniqueUnresolved = totalUnresolved.Distinct(StringComparer.Ordinal).ToList();
 
-            foreach (var candidate in candidates)
+            // Deduplicate ambiguous by type name
+            var uniqueAmbiguous = totalAmbiguous
+                .GroupBy(a => a.TypeName, StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToList();
+
+            var result = new ImportResult(uniqueAdded, uniqueAmbiguous, uniqueUnresolved);
+
+            // Enhance message for multi-file scopes
+            string message = result.Message;
+            if (documents.Count > 1 && filesChanged > 0)
             {
-                if (candidate.IsUnambiguous)
-                {
-                    safeNamespaces.Add(candidate.CandidateNamespaces[0]);
-                }
-                else if (candidate.IsAmbiguous)
-                {
-                    ambiguousImports.Add(new AmbiguousImport(
-                        candidate.TypeName,
-                        candidate.CandidateNamespaces));
-                }
-                else if (candidate.IsUnresolved)
-                {
-                    unresolvedNames.Add(candidate.TypeName);
-                }
+                message += $" ({filesChanged} file(s) changed)";
             }
-
-            // Deduplicate safe namespaces
-            safeNamespaces = safeNamespaces.Distinct(StringComparer.Ordinal).ToList();
-
-            // Step 4: Apply safe usings
-            if (safeNamespaces.Count > 0)
-            {
-                await _applier.ApplyAsync(document, safeNamespaces, CancellationToken.None);
-            }
-
-            // Step 5: Show result
-            var result = new ImportResult(safeNamespaces, ambiguousImports, unresolvedNames);
 
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            _notificationService.ShowResult(result);
+            _notificationService.ShowInfo(message);
         }
     }
 }

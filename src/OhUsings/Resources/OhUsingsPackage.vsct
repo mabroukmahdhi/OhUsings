@@ -7,39 +7,109 @@
 
   <Commands package="guidOhUsingsPackage">
 
+    <Bitmaps>
+      <Bitmap guid="guidCommandIcons" href="CommandIcons.png"
+              usedList="bmpSubmenu, bmpFile, bmpProject, bmpSolution" />
+    </Bitmaps>
+
+    <Menus>
+      <!-- Submenu that appears in the editor context menu -->
+      <Menu guid="guidOhUsingsCmdSet" id="OhUsingsSubMenu" priority="0x0600" type="Menu">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" />
+        <Icon guid="guidCommandIcons" id="bmpSubmenu" />
+        <Strings>
+          <ButtonText>OhUsings</ButtonText>
+        </Strings>
+      </Menu>
+      <!-- Submenu that appears in the Tools menu -->
+      <Menu guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenu" priority="0x0600" type="Menu">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" />
+        <Icon guid="guidCommandIcons" id="bmpSubmenu" />
+        <Strings>
+          <ButtonText>OhUsings</ButtonText>
+        </Strings>
+      </Menu>
+    </Menus>
+
     <Groups>
+      <!-- Group in Tools menu to host the submenu -->
       <Group guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" priority="0x0600">
         <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS" />
       </Group>
+      <!-- Group in editor context menu to host the submenu -->
       <Group guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" priority="0x0600">
         <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CODEWIN" />
+      </Group>
+      <!-- Group inside the context submenu for the 3 scope commands -->
+      <Group guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" priority="0x0100">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenu" />
+      </Group>
+      <!-- Group inside the Tools submenu for the 3 scope commands -->
+      <Group guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenuGroup" priority="0x0100">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenu" />
       </Group>
     </Groups>
 
     <Buttons>
-      <Button guid="guidOhUsingsCmdSet" id="ImportAllMissingUsingsCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsMenuGroup" />
+      <!-- Current File -->
+      <Button guid="guidOhUsingsCmdSet" id="ImportCurrentFileCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
+        <Icon guid="guidCommandIcons" id="bmpFile" />
         <Strings>
-          <ButtonText>OhUsings: Import All Missing Usings</ButtonText>
+          <ButtonText>Add in Current File</ButtonText>
         </Strings>
       </Button>
-      <Button guid="guidOhUsingsCmdSet" id="ImportAllMissingUsingsContextCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsEditorContextMenuGroup" />
+      <!-- Current Project -->
+      <Button guid="guidOhUsingsCmdSet" id="ImportCurrentProjectCommandId" priority="0x0200" type="Button">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
+        <Icon guid="guidCommandIcons" id="bmpProject" />
         <Strings>
-          <ButtonText>OhUsings: Import All Missing Usings</ButtonText>
+          <ButtonText>Add in Current Project</ButtonText>
+        </Strings>
+      </Button>
+      <!-- Entire Solution -->
+      <Button guid="guidOhUsingsCmdSet" id="ImportSolutionCommandId" priority="0x0300" type="Button">
+        <Parent guid="guidOhUsingsCmdSet" id="OhUsingsSubMenuGroup" />
+        <Icon guid="guidCommandIcons" id="bmpSolution" />
+        <Strings>
+          <ButtonText>Add in Solution</ButtonText>
         </Strings>
       </Button>
     </Buttons>
 
   </Commands>
 
+  <!-- Place the same 3 commands into the Tools submenu as well -->
+  <CommandPlacements>
+    <CommandPlacement guid="guidOhUsingsCmdSet" id="ImportCurrentFileCommandId" priority="0x0100">
+      <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenuGroup" />
+    </CommandPlacement>
+    <CommandPlacement guid="guidOhUsingsCmdSet" id="ImportCurrentProjectCommandId" priority="0x0200">
+      <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenuGroup" />
+    </CommandPlacement>
+    <CommandPlacement guid="guidOhUsingsCmdSet" id="ImportSolutionCommandId" priority="0x0300">
+      <Parent guid="guidOhUsingsCmdSet" id="OhUsingsToolsSubMenuGroup" />
+    </CommandPlacement>
+  </CommandPlacements>
+
   <Symbols>
     <GuidSymbol name="guidOhUsingsPackage" value="{d4e3f2a1-b5c6-4d7e-8f9a-0b1c2d3e4f50}" />
     <GuidSymbol name="guidOhUsingsCmdSet" value="{e5f4a3b2-c6d7-4e8f-9a0b-1c2d3e4f5a61}">
       <IDSymbol name="OhUsingsToolsMenuGroup" value="0x1020" />
       <IDSymbol name="OhUsingsEditorContextMenuGroup" value="0x1021" />
-      <IDSymbol name="ImportAllMissingUsingsCommandId" value="0x0100" />
-      <IDSymbol name="ImportAllMissingUsingsContextCommandId" value="0x0101" />
+      <IDSymbol name="OhUsingsSubMenu" value="0x1030" />
+      <IDSymbol name="OhUsingsToolsSubMenu" value="0x1031" />
+      <IDSymbol name="OhUsingsSubMenuGroup" value="0x1040" />
+      <IDSymbol name="OhUsingsToolsSubMenuGroup" value="0x1041" />
+      <IDSymbol name="ImportCurrentFileCommandId" value="0x0100" />
+      <IDSymbol name="ImportCurrentProjectCommandId" value="0x0101" />
+      <IDSymbol name="ImportSolutionCommandId" value="0x0102" />
+    </GuidSymbol>
+    <GuidSymbol name="guidCommandIcons" value="{b1a2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d}">
+      <IDSymbol name="bmpSubmenu" value="1" />
+      <IDSymbol name="bmpFile" value="2" />
+      <IDSymbol name="bmpProject" value="3" />
+      <IDSymbol name="bmpSolution" value="4" />
     </GuidSymbol>
   </Symbols>
 

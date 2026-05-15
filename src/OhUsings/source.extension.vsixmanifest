@@ -6,6 +6,8 @@
     <Description xml:space="preserve">Import all missing C# using directives in the current document at once.</Description>
     <MoreInfo>https://github.com/MabroukMahdhi/OhUsings</MoreInfo>
     <License>LICENSE</License>
+    <Icon>Resources\OhUsingsIcon.png</Icon>
+    <PreviewImage>Resources\OhUsingsIcon.png</PreviewImage>
     <Tags>csharp, usings, roslyn, productivity, imports</Tags>
   </Metadata>
   <Installation>

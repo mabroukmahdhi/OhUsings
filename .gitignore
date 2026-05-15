@@ -427,3 +427,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/src/OhUsings/OhUsings.csproj.lscache
+/tests/OhUsings.Tests/OhUsings.Tests.csproj.lscache

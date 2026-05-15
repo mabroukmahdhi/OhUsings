@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="Resources/OhUsingsIcon.png" alt="OhUsings logo" width="128" />
-</p>
-
 <h1 align="center">OhUsings</h1>
 
 <p align="center">

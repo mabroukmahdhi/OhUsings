@@ -7,7 +7,7 @@
     <MoreInfo>https://github.com/MabroukMahdhi/OhUsings</MoreInfo>
     <License>LICENSE</License>
     <Icon>Resources\OhUsingsIcon.png</Icon>
-    <PreviewImage>Resources\OhUsingsIcon.png</PreviewImage>
+    <PreviewImage>Resources\OhUsingsPreview.png</PreviewImage>
     <Tags>csharp, usings, roslyn, productivity, imports</Tags>
   </Metadata>
   <Installation>

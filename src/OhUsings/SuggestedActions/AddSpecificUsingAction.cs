@@ -6,13 +6,12 @@ using Microsoft.CodeAnalysis;
 using Microsoft.VisualStudio.Imaging;
 using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.Language.Intellisense;
-using OhUsings.Services;
 
 namespace OhUsings.SuggestedActions
 {
     /// <summary>
-    /// Lightbulb action that adds a specific namespace for an ambiguous type.
-    /// Shown once per candidate namespace so the user can pick the right one.
+    /// Lightbulb parent action for an ambiguous type with a specific namespace candidate.
+    /// Expands into File / Project / Solution sub-actions.
     /// </summary>
     internal sealed class AddSpecificUsingAction : ISuggestedAction
     {
@@ -38,44 +37,27 @@ namespace OhUsings.SuggestedActions
         public ImageMoniker IconMoniker => KnownMonikers.Namespace;
         public string? IconAutomationText => "Namespace";
         public string? InputGestureText => null;
-        public bool HasActionSets => false;
+        public bool HasActionSets => true;
         public bool HasPreview => false;
 
         public Task<IEnumerable<SuggestedActionSet>?> GetActionSetsAsync(CancellationToken cancellationToken)
-            => Task.FromResult<IEnumerable<SuggestedActionSet>?>(null);
+        {
+            var namespaces = new[] { _namespace };
+            var subActions = new ISuggestedAction[]
+            {
+                new ApplyUsingScopeAction(_workspace, _document, namespaces, ApplyUsingScopeAction.ApplyScope.File),
+                new ApplyUsingScopeAction(_workspace, _document, namespaces, ApplyUsingScopeAction.ApplyScope.Project),
+                new ApplyUsingScopeAction(_workspace, _document, namespaces, ApplyUsingScopeAction.ApplyScope.Solution),
+            };
+
+            var result = new[] { new SuggestedActionSet(subActions) };
+            return Task.FromResult<IEnumerable<SuggestedActionSet>?>(result);
+        }
 
         public Task<object?> GetPreviewAsync(CancellationToken cancellationToken)
             => Task.FromResult<object?>(null);
 
-        public void Invoke(CancellationToken cancellationToken)
-        {
-            var applier = new UsingDirectiveApplier();
-            Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.Run(async () =>
-            {
-                var currentDoc = FindDocument();
-                if (currentDoc != null)
-                {
-                    await applier.ApplyAsync(
-                        currentDoc,
-                        new[] { _namespace },
-                        cancellationToken);
-                }
-            });
-        }
-
-        private Document? FindDocument()
-        {
-            if (_document.FilePath == null) return null;
-            foreach (var project in _workspace.CurrentSolution.Projects)
-            {
-                foreach (var doc in project.Documents)
-                {
-                    if (string.Equals(doc.FilePath, _document.FilePath, StringComparison.OrdinalIgnoreCase))
-                        return doc;
-                }
-            }
-            return null;
-        }
+        public void Invoke(CancellationToken cancellationToken) { /* sub-actions handle invocation */ }
 
         public bool TryGetTelemetryId(out Guid telemetryId) { telemetryId = Guid.Empty; return false; }
         public void Dispose() { }

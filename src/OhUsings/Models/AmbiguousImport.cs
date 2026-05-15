@@ -1,3 +1,7 @@
+// ----------------------------------------------------------------------
+// Copyright (c) 2026 Mabrouk Mahdhi & Wiem Ksaier. All rights reserved.
+// ----------------------------------------------------------------------
+
 using System.Collections.Generic;
 
 namespace OhUsings.Models

@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using OhUsings.Models;
@@ -7,11 +8,13 @@ using OhUsings.Models;
 namespace OhUsings.Services
 {
     /// <summary>
-    /// Displays import results via the Visual Studio status bar and output window.
+    /// Displays import results via the Visual Studio status bar and Output window.
     /// </summary>
     public sealed class NotificationService : INotificationService
     {
+        private static readonly Guid OutputPaneGuid = new Guid("f3a7b8c9-d0e1-4f2a-b3c4-d5e6f7a8b9c0");
         private readonly AsyncPackage _package;
+        private IVsOutputWindowPane? _outputPane;
 
         public NotificationService(AsyncPackage package)
         {
@@ -22,26 +25,23 @@ namespace OhUsings.Services
         public void ShowResult(ImportResult result)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-
             SetStatusBarText(result.Message);
-
-            // Write detailed info to Debug output for diagnostics
-            Debug.WriteLine($"[OhUsings] {result.Message}");
+            WriteOutputLine(result.Message);
 
             if (result.AmbiguousImports.Count > 0)
             {
                 foreach (var ambiguous in result.AmbiguousImports)
                 {
-                    Debug.WriteLine(
-                        $"[OhUsings] Ambiguous: '{ambiguous.TypeName}' -> " +
+                    WriteOutputLine(
+                        $"  Ambiguous: '{ambiguous.TypeName}' -> " +
                         string.Join(", ", ambiguous.CandidateNamespaces));
                 }
             }
 
             if (result.UnresolvedNames.Count > 0)
             {
-                Debug.WriteLine(
-                    $"[OhUsings] Unresolved: {string.Join(", ", result.UnresolvedNames)}");
+                WriteOutputLine(
+                    $"  Unresolved: {string.Join(", ", result.UnresolvedNames)}");
             }
         }
 
@@ -58,7 +58,49 @@ namespace OhUsings.Services
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             SetStatusBarText($"OhUsings Error: {message}");
-            Debug.WriteLine($"[OhUsings] ERROR: {message}");
+            WriteOutputLine($"ERROR: {message}");
+        }
+
+        /// <inheritdoc />
+        public void WriteOutputLine(string message)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                var pane = GetOrCreateOutputPane();
+                if (pane != null)
+                {
+                    pane.OutputStringThreadSafe(message + Environment.NewLine);
+                    pane.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[OhUsings] Failed to write to Output pane: {ex.Message}");
+            }
+        }
+
+        private IVsOutputWindowPane? GetOrCreateOutputPane()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (_outputPane != null)
+                return _outputPane;
+
+            var outputWindow = Package.GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+            if (outputWindow == null)
+                return null;
+
+            var paneGuid = OutputPaneGuid;
+            int hr = outputWindow.GetPane(ref paneGuid, out _outputPane);
+            if (ErrorHandler.Failed(hr) || _outputPane == null)
+            {
+                outputWindow.CreatePane(ref paneGuid, "OhUsings", 1, 1);
+                outputWindow.GetPane(ref paneGuid, out _outputPane);
+            }
+
+            return _outputPane;
         }
 
         private void SetStatusBarText(string text)

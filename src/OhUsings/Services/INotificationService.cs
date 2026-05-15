@@ -13,13 +13,18 @@ namespace OhUsings.Services
         void ShowResult(ImportResult result);
 
         /// <summary>
-        /// Shows an informational message.
+        /// Shows an informational message in the status bar.
         /// </summary>
         void ShowInfo(string message);
 
         /// <summary>
-        /// Shows an error message.
+        /// Shows an error message in the status bar.
         /// </summary>
         void ShowError(string message);
+
+        /// <summary>
+        /// Writes a line to the OhUsings Output window pane.
+        /// </summary>
+        void WriteOutputLine(string message);
     }
 }

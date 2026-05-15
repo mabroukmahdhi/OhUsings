@@ -224,13 +224,48 @@ namespace OhUsings.Commands
 
             var result = new ImportResult(uniqueAdded, uniqueAmbiguous, uniqueUnresolved);
 
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            // Write summary to Output window
+            _notificationService.WriteOutputLine("─────────────────────────────────────");
+            _notificationService.WriteOutputLine(
+                $"OhUsings: Scanned {docPaths.Count} file(s) in {scopeLabel}.");
+
+            if (uniqueAdded.Count > 0)
+            {
+                _notificationService.WriteOutputLine(
+                    $"  Added {uniqueAdded.Count} using(s) across {filesChanged} file(s):");
+                foreach (var ns in uniqueAdded)
+                    _notificationService.WriteOutputLine($"    + using {ns};");
+            }
+            else
+            {
+                _notificationService.WriteOutputLine("  No unambiguous usings to add.");
+            }
+
+            if (uniqueAmbiguous.Count > 0)
+            {
+                _notificationService.WriteOutputLine(
+                    $"  Skipped {uniqueAmbiguous.Count} ambiguous type(s) — resolve manually via lightbulb:");
+                foreach (var a in uniqueAmbiguous)
+                {
+                    _notificationService.WriteOutputLine(
+                        $"    ? '{a.TypeName}' could be: {string.Join(", ", a.CandidateNamespaces)}");
+                }
+            }
+
+            if (uniqueUnresolved.Count > 0)
+            {
+                _notificationService.WriteOutputLine(
+                    $"  Could not resolve: {string.Join(", ", uniqueUnresolved)}");
+            }
+
+            // Status bar summary
             string message = result.Message;
             if (filesChanged > 0 && docPaths.Count > 1)
             {
                 message += $" ({filesChanged} file(s) changed)";
             }
-
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             _notificationService.ShowInfo(message);
         }
 
